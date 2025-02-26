@@ -3,7 +3,7 @@ package auth.datalab.siesta.S3Connector
 import auth.datalab.siesta.BusinessLogic.DBConnector.DBConnector
 import auth.datalab.siesta.BusinessLogic.Metadata.{MetaData, SetMetadata}
 import auth.datalab.siesta.BusinessLogic.Model.Structs.LastChecked
-import auth.datalab.siesta.BusinessLogic.Model.{DetailedEvent, Event, EventTrait, Structs}
+import auth.datalab.siesta.BusinessLogic.Model.{DetailedEvent, Event, EventTrait, EventWithAttributes, Structs}
 import auth.datalab.siesta.CommandLineParser.Config
 import auth.datalab.siesta.Utils.Utilities
 import org.apache.hadoop.fs.{FileSystem, Path}
@@ -157,7 +157,8 @@ class S3Connector extends DBConnector{
             val event_type = x.getAs[String]("event_type")
             val pos = x.getAs[Int]("position")
             val ts = x.getAs[String]("timestamp")
-            new Event(trace_id = id, event_type = event_type, position = pos, timestamp = ts)
+            val attributes = x.getAs[Map[String, String]]("attributes")
+            new EventWithAttributes(trace_id = id, event_type = event_type, position = pos, timestamp = ts, attributes = attributes)
           })
       }
     } catch {
@@ -185,9 +186,13 @@ class S3Connector extends DBConnector{
     }
 
     else {
-      val df = sequenceRDD
-        .map(x => (x.trace_id, x.event_type, x.position, x.timestamp))
-        .toDF("trace_id", "event_type", "position", "timestamp")
+      val df = sequenceRDD.map { x =>
+        val attributes = x match {
+          case event: EventWithAttributes => event.attributes
+          case _ => Map.empty[String, String] // Default empty attributes for non-EventWithAttributes
+        }
+        (x.trace_id, x.event_type, x.position, x.timestamp, attributes)
+      }.toDF("trace_id", "event_type", "position", "timestamp", "attributes")
       metaData.traces += df.filter(_.getAs[Int]("position") == 0).count() //add only new traces in this batch
       metaData.events += df.count()
       df.write.mode(SaveMode.Append).parquet(seq_table)

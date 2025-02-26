@@ -48,7 +48,8 @@ object SiestaStreamingPipeline {
       DataTypes.createStructField("trace", StringType, false),
       DataTypes.createStructField("event_type", StringType, false),
       DataTypes.createStructField("timestamp", TimestampType, false),
-      DataTypes.createStructField("position",IntegerType,false)
+      DataTypes.createStructField("position",IntegerType,false),
+      DataTypes.createStructField("attributes", MapType(StringType, StringType), false)
     ))
 
     val df_events: Dataset[EventStream] = df.selectExpr("CAST(value AS STRING) as event")

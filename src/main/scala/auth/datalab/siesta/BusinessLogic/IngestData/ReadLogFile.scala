@@ -1,6 +1,6 @@
 package auth.datalab.siesta.BusinessLogic.IngestData
 
-import auth.datalab.siesta.BusinessLogic.Model.{DetailedEvent, Event, Sequence}
+import auth.datalab.siesta.BusinessLogic.Model.{DetailedEvent, Event, EventWithAttributes, Sequence}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
 import org.deckfour.xes.in.XParserRegistry
@@ -10,6 +10,7 @@ import java.io.{File, FileInputStream}
 import java.text.SimpleDateFormat
 import java.util.Scanner
 import scala.collection.convert.ImplicitConversions.`list asScalaBuffer`
+import scala.jdk.CollectionConverters._
 //import scala.collection.JavaConversions.asScalaBuffer
 import scala.collection.mutable.ArrayBuffer
 
@@ -119,7 +120,15 @@ object ReadLogFile {
       val list = trace.zipWithIndex.map(e => {
         val event_name = e._1.getAttributes.get("concept:name").toString
         val timestamp_occurred = e._1.getAttributes.get("time:timestamp").toString
-        new Event(timestamp = df2.format(df4.parse(timestamp_occurred)), event_type = event_name, trace_id = case_id, position = e._2)
+
+        val attributeKeys = e._1.getAttributes.keySet().asScala
+
+        val additionalAttributes = attributeKeys
+          .filter(key => key != "concept:name" && key != "time:timestamp" && key != "@@index" && key != "@@case_index")
+          .map(key => key -> e._1.getAttributes.get(key).toString)
+          .toMap
+
+        new EventWithAttributes(timestamp = df2.format(df4.parse(timestamp_occurred)), event_type = event_name, trace_id = case_id, position = e._2, attributes = additionalAttributes)
       }).toList
 
       new Sequence(list, case_id)
