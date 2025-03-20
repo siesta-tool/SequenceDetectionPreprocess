@@ -4,7 +4,7 @@ import auth.datalab.siesta.BusinessLogic.ExtractCounts.ExtractCounts
 import auth.datalab.siesta.BusinessLogic.ExtractPairs.ExtractPairs
 import auth.datalab.siesta.BusinessLogic.IngestData.IngestingProcess
 import auth.datalab.siesta.BusinessLogic.Model.Structs.{InvertedSingleFull, LastChecked}
-import auth.datalab.siesta.BusinessLogic.Model.{Event, EventTrait}
+import auth.datalab.siesta.BusinessLogic.Model.{Event, EventTrait, EventWithAttributes}
 import auth.datalab.siesta.BusinessLogic.Metadata.MetaData
 import auth.datalab.siesta.CommandLineParser.Config
 import auth.datalab.siesta.S3Connector.S3Connector
@@ -71,8 +71,14 @@ object SiestaPipeline {
           .groupBy(_.trace_id).map(x => (x._1, x._2.map(_.position).max + 1)).collectAsMap()
         val bLast_positions = spark.sparkContext.broadcast(last_positions)
         sequenceRDD.map(x => {
+
+          val attributes = x match {
+            case event: EventWithAttributes => event.attributes // Extract attributes if it's an EventWithAttributes
+            case _ => Map.empty[String, String] // Default empty attributes if it's just an Event
+          }
+
           val prev_pos = bLast_positions.value.getOrElse(x.trace_id, 0)
-          new Event(trace_id = x.trace_id, timestamp = x.timestamp, event_type = x.event_type, position = x.position + prev_pos)
+          new EventWithAttributes(trace_id = x.trace_id, timestamp = x.timestamp, event_type = x.event_type, position = x.position + prev_pos, attributes = attributes)
         })
       } else { //no need to fix
         sequenceRDD
