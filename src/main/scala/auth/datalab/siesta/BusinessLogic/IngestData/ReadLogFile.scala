@@ -125,10 +125,17 @@ object ReadLogFile {
 
         val additionalAttributes = attributeKeys
           .filter(key => key != "concept:name" && key != "time:timestamp" && key != "@@index" && key != "@@case_index")
-          .map(key => key -> e._1.getAttributes.get(key).toString)
-          .toMap
 
-        new EventWithAttributes(timestamp = df2.format(df4.parse(timestamp_occurred)), event_type = event_name, trace_id = case_id, position = e._2, attributes = additionalAttributes)
+        var finalAttributes = Map.empty[String, String];
+        if (additionalAttributes.nonEmpty) {
+           finalAttributes = additionalAttributes.map(key => key -> e._1.getAttributes.get(key).toString)
+            .toMap
+        }
+        else {
+          finalAttributes = Map("no_attributes_present" -> "null")
+        }
+
+        new EventWithAttributes(timestamp = df2.format(df4.parse(timestamp_occurred)), event_type = event_name, trace_id = case_id, position = e._2, attributes = finalAttributes)
       }).toList
 
       new Sequence(list, case_id)
