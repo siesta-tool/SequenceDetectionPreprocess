@@ -1,10 +1,10 @@
 package auth.datalab.siesta.Pipeline
 
 import auth.datalab.siesta.BusinessLogic.ExtractCounts.ExtractCounts
-import auth.datalab.siesta.BusinessLogic.ExtractPairs.ExtractPairs
+import auth.datalab.siesta.BusinessLogic.ExtractPairs.{ExtractPairs, ExtractPairsAttributes}
 import auth.datalab.siesta.BusinessLogic.IngestData.IngestingProcess
-import auth.datalab.siesta.BusinessLogic.Model.Structs.{InvertedSingleFull, LastChecked}
-import auth.datalab.siesta.BusinessLogic.Model.{Event, EventTrait, EventWithAttributes}
+import auth.datalab.siesta.BusinessLogic.Model.Structs.{InvertedSingleAttributes, InvertedSingleFull, LastChecked}
+import auth.datalab.siesta.BusinessLogic.Model.{Event, EventTrait, EventWithAttributes, Structs}
 import auth.datalab.siesta.BusinessLogic.Metadata.MetaData
 import auth.datalab.siesta.CommandLineParser.Config
 import auth.datalab.siesta.S3Connector.S3Connector
@@ -99,10 +99,24 @@ object SiestaPipeline {
           InvertedSingleFull(x._1._1, x._1._2, ts_s.map(_._2), ts_s.map(_._1))
         })
 
+      val invertedAttributes: RDD[InvertedSingleAttributes] = singleRDD
+        .groupBy(x => (x.trace_id, x.event_type))
+        .map(x => {
+          val ts_s = x._2.map(y=>(y.position,y.timestamp)).toList.sortWith((a,b)=>a._1<b._1)
+          val attributes = x._2.map {
+            case event: EventWithAttributes => event.attributes  // Extract attributes from EventWithAttributes
+            case _ => Map.empty[String, String]  // Default empty attributes for non-EventWithAttributes
+          }.toList
+          //          InvertedSingleFull(x._1._1, x._1._2, ts_s.map(_._2), ts_s.map(_._1))
+          InvertedSingleAttributes(x._1._1, x._1._2, ts_s.map(_._2), ts_s.map(_._1), attributes)
+        })
+
       val lastChecked: RDD[LastChecked] = dbConnector.read_last_checked_table(metadata)
 
       //extract new pairs
       val pairs = ExtractPairs.extract(inverted, lastChecked, metadata.lookback)
+
+      val pairsAttributes = ExtractPairsAttributes.extract(invertedAttributes, lastChecked, metadata.lookback)
 
       //merging last checked records
       val diffInMills = TimeUnit.DAYS.toMillis(metadata.lookback)
@@ -136,7 +150,7 @@ object SiestaPipeline {
       dbConnector.write_last_checked_table(filtered_rdd, metadata)
 //      pairs._2.unpersist()
       //write new event pairs
-      dbConnector.write_index_table(pairs._1, metadata)
+      dbConnector.write_index_table_attributes(pairsAttributes._1, metadata)
 //      pairs._1.unpersist()
       //calculate and write countTable
       val counts = ExtractCounts.extract(pairs._1)

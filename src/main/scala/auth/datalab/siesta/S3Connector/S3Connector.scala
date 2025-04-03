@@ -213,8 +213,13 @@ class S3Connector extends DBConnector{
     val spark = SparkSession.builder().getOrCreate()
     import spark.sqlContext.implicits._
     val start = System.currentTimeMillis()
-    sequenceRDD.map(x => (x.event_type, x.trace_id, x.position, x.timestamp))
-      .toDF("event_type", "trace_id", "position", "timestamp")
+    sequenceRDD.map { x =>
+        val attributes = x match {
+          case event: EventWithAttributes => event.attributes
+          case _ => Map.empty[String, String] // Default empty attributes for non-EventWithAttributes
+        }
+        (x.event_type, x.trace_id, x.position, x.timestamp, attributes)
+      }.toDF("event_type", "trace_id", "position", "timestamp", "attributes")
       .repartition(col("event_type")) //partition based on the event type
       .write
       .partitionBy("event_type")
@@ -241,7 +246,8 @@ class S3Connector extends DBConnector{
           val event_type = row.getAs[String]("event_type")
           val pos = row.getAs[Int]("position")
           val ts = row.getAs[String]("timestamp")
-          new Event(trace_id = id, event_type = event_type, position = pos, timestamp = ts)
+          val attributes = row.getAs[Map[String,String]]("attributes")
+          new EventWithAttributes(trace_id = id, event_type = event_type, position = pos, timestamp = ts, attributes = attributes)
         })
 
     } catch {
@@ -320,6 +326,32 @@ class S3Connector extends DBConnector{
           (x.eventA, x.eventB, x.id, x.timeA, x.timeB)
         })
         .toDF("eventA", "eventB", "trace_id", "timestampA", "timestampB")
+    }
+
+    //partition by the interval (start and end) and the first event of the event type pair
+    df.repartition(col("eventA"))
+      .write.partitionBy("eventA")
+      .mode(SaveMode.Append).parquet(this.index_table)
+    val total = System.currentTimeMillis() - start
+    Logger.getLogger("Index Table Write").log(Level.INFO, s"finished in ${total / 1000} seconds")
+  }
+
+  def write_index_table_attributes(newPairs: RDD[Structs.PairFullAttributes], metaData: MetaData): Unit = {
+    Logger.getLogger("Index Table Write").log(Level.INFO, s"Start writing Index table")
+    val spark = SparkSession.builder().getOrCreate()
+    import spark.sqlContext.implicits._
+    val start = System.currentTimeMillis()
+    metaData.pairs += newPairs.count() //update metadata
+    val df = if (metaData.mode == "positions") {
+      newPairs.map(x => {
+          (x.eventA, x.eventB, x.id, x.positionA, x.positionB, x.attributesA, x.attributesB)
+        })
+        .toDF("eventA", "eventB", "trace_id", "positionA", "positionB", "attributesA", "attributesB")
+    } else {
+      newPairs.map(x => {
+          (x.eventA, x.eventB, x.id, x.timeA, x.timeB, x.attributesA, x.attributesB)
+        })
+        .toDF("eventA", "eventB", "trace_id", "timestampA", "timestampB", "attributesA", "attributesB")
     }
 
     //partition by the interval (start and end) and the first event of the event type pair

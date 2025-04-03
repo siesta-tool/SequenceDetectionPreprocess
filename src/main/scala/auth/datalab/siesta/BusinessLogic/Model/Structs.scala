@@ -25,13 +25,16 @@ object Structs {
   //For the single inverted table
   case class InvertedSingle(event_name: String, times: List[IdTimePositionList])
   case class InvertedSingleFull(id: String, event_name: String, times:List[String], positions:List[Int])
+  case class InvertedSingleAttributes(id: String, event_name: String, times:List[String], positions:List[Int], attributes:List[Map[String,String]])
   case class LastPosition (id:String, position:Int)
 
   //For last_checked
   case class LastChecked (eventA:String,eventB:String, id: String, timestamp:String)
+  case class LastCheckedAttributes (eventA:String,eventB:String, id:String, timestamp:String, attributesA:Map[String,String], attributesB:Map[String,String])
 
   //Extract Pairs
   case class PairFull(eventA:String,eventB:String,id:String,timeA:Timestamp,timeB:Timestamp,positionA:Int,positionB:Int)
+  case class PairFullAttributes(eventA:String,eventB:String,id:String,timeA:Timestamp,timeB:Timestamp,positionA:Int,positionB:Int,attributesA:Map[String,String],attributesB:Map[String,String])
   //Count
   case class CountList(eventA:String,counts:List[(String,Long,Int,Long,Long,Double)])
   case class Count(eventA:String, eventB:String, sum_duration:Long, count:Int, min_duration:Long, max_duration:Long, sum_squares:Double)
