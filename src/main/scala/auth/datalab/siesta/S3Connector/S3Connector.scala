@@ -10,7 +10,7 @@ import org.apache.hadoop.fs.{FileSystem, Path}
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.catalyst.ScalaReflection
-import org.apache.spark.sql.functions.col
+import org.apache.spark.sql.functions.{col, explode, map_keys}
 import org.apache.spark.sql.types.StructType
 import org.apache.spark.sql.{DataFrame, SaveMode, SparkSession}
 
@@ -27,6 +27,7 @@ class S3Connector extends DBConnector{
   private var last_checked_table: String = _
   private var index_table: String = _
   private var count_table: String = _
+  private var allKeys: Array[String] = null
 
   /**
    * Spark initializes the connection to S3 utilizing the hadoop properties and the aws-bundle library
@@ -193,9 +194,32 @@ class S3Connector extends DBConnector{
         }
         (x.trace_id, x.event_type, x.position, x.timestamp, attributes)
       }.toDF("trace_id", "event_type", "position", "timestamp", "attributes")
-      metaData.traces += df.filter(_.getAs[Int]("position") == 0).count() //add only new traces in this batch
-      metaData.events += df.count()
-      df.write.mode(SaveMode.Append).parquet(seq_table)
+
+      allKeys = df
+        .select(explode(map_keys(col("attributes"))).as("key"))
+        .distinct()
+        .collect()
+        .map(_.getString(0)) // Get array of distinct keys
+
+      // Step 2: Create select expressions for each key
+      val attributeColumns = allKeys.map { key =>
+        col("attributes").getItem(key).as(key)
+      }
+
+      val final_df = df.select(
+        Seq(
+          col("trace_id"),
+          col("event_type"),
+          col("position"),
+          col("timestamp")
+        ) ++ attributeColumns: _*
+      )
+
+      final_df.printSchema()
+
+      metaData.traces += final_df.filter(_.getAs[Int]("position") == 0).count() //add only new traces in this batch
+      metaData.events += final_df.count()
+      final_df.write.mode(SaveMode.Append).parquet(seq_table)
     }
     val total = System.currentTimeMillis() - start
     Logger.getLogger("Sequence Table Write").log(Level.INFO, s"finished in ${total / 1000} seconds")
@@ -213,13 +237,28 @@ class S3Connector extends DBConnector{
     val spark = SparkSession.builder().getOrCreate()
     import spark.sqlContext.implicits._
     val start = System.currentTimeMillis()
-    sequenceRDD.map { x =>
+    val df = sequenceRDD.map { x =>
         val attributes = x match {
           case event: EventWithAttributes => event.attributes
           case _ => Map.empty[String, String] // Default empty attributes for non-EventWithAttributes
         }
         (x.event_type, x.trace_id, x.position, x.timestamp, attributes)
       }.toDF("event_type", "trace_id", "position", "timestamp", "attributes")
+
+    val attributeColumns = allKeys.map { key =>
+      col("attributes").getItem(key).as(key)
+    }
+
+    val final_df = df.select(
+      Seq(
+        col("trace_id"),
+        col("event_type"),
+        col("position"),
+        col("timestamp")
+      ) ++ attributeColumns: _*
+    )
+
+    final_df
       .repartition(col("event_type")) //partition based on the event type
       .write
       .partitionBy("event_type")
@@ -239,6 +278,8 @@ class S3Connector extends DBConnector{
   def read_single_table(metaData: MetaData): RDD[Event] = {
     val spark = SparkSession.builder().getOrCreate()
     try {
+      val baseCols = Set("trace_id", "event_type", "position", "timestamp")
+
       spark.read.parquet(single_table)
         .rdd
         .map(row => {
@@ -246,7 +287,13 @@ class S3Connector extends DBConnector{
           val event_type = row.getAs[String]("event_type")
           val pos = row.getAs[Int]("position")
           val ts = row.getAs[String]("timestamp")
-          val attributes = row.getAs[Map[String,String]]("attributes")
+
+          val attributes = row.schema.fields
+            .map(_.name)
+            .filterNot(baseCols.contains)
+            .map(name => name -> Option(row.getAs[String](name)).getOrElse(""))
+            .toMap
+
           new EventWithAttributes(trace_id = id, event_type = event_type, position = pos, timestamp = ts, attributes = attributes)
         })
 
@@ -354,8 +401,27 @@ class S3Connector extends DBConnector{
         .toDF("eventA", "eventB", "trace_id", "timestampA", "timestampB", "attributesA", "attributesB")
     }
 
+    val attributeColsA = allKeys.map { key =>
+      col("attributesA").getItem(key).as(s"${key}_A")
+    }
+
+    val attributeColsB = allKeys.map { key =>
+      col("attributesB").getItem(key).as(s"${key}_B")
+    }
+
+    val commonCols = if (metaData.mode == "positions") {
+      Seq("eventA", "eventB", "trace_id", "positionA", "positionB")
+    } else {
+      Seq("eventA", "eventB", "trace_id", "timestampA", "timestampB")
+    }
+
+    // 4. Select and build the final DataFrame
+    val final_df = df.select(
+      commonCols.map(col) ++ attributeColsA ++ attributeColsB: _*
+    )
+
     //partition by the interval (start and end) and the first event of the event type pair
-    df.repartition(col("eventA"))
+    final_df.repartition(col("eventA"))
       .write.partitionBy("eventA")
       .mode(SaveMode.Append).parquet(this.index_table)
     val total = System.currentTimeMillis() - start
