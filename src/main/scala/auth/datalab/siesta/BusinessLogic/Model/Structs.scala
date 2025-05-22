@@ -16,6 +16,8 @@ object Structs {
   //For streaming
 
   case class StreamingPair(eventA: String, eventB: String, id: String, timeA: Timestamp, timeB: Timestamp, positionA: Int, positionB: Int)
+  case class StreamingPairAttributes(eventA: String, eventB: String, id: String, timeA: Timestamp, timeB: Timestamp, positionA: Int, positionB: Int, attributesA: Map[String,String], attributesB: Map[String,String])
+
 
   //General Model
   case class EventWithPosition(event_name:String,timestamp:Timestamp,position:Int)

@@ -18,11 +18,16 @@ def read_file(file):
             trace = line.split("::")[0]
             events = line.split("::")[1].split(",")        
             for index,event in enumerate(events):
+                parts = event.strip().split("/delab/")
                 o={}
                 o["trace"]=trace
                 o["event_type"]=event.split("/delab/")[0].strip()
                 o["timestamp"]=event.split("/delab/")[1].strip()
                 o["position"]=index
+                attr_str = parts[2].strip()
+                attr_pairs = [kv.split(":") for kv in attr_str.split("&") if ":" in kv]
+                attributes = {k.strip(): v.strip() for k, v in attr_pairs}
+                o["attributes"] = attributes
                 data.append(o)   
     data.sort(key=lambda x: x['timestamp'])
     return data
@@ -35,9 +40,9 @@ if __name__ == "__main__":
 #     Demo params for now
 # =============================================================================
 #     file="../experiments/input/helpdesk.withTimestamp"
-    eventsPerSecond=5000000000000000000000000
+    eventsPerSecond=5000000000000000000
     #print("Streaming {} file, with {} events per second".format(file,eventsPerSecond))
-    producer = KafkaProducer(bootstrap_servers='siesta-kafka:9092',
+    producer = KafkaProducer(bootstrap_servers='localhost:9092',
                             value_serializer=lambda v: json.dumps(v).encode('utf-8'),
                             key_serializer=lambda k: str(k).encode('utf-8'))
     data= read_file(file)

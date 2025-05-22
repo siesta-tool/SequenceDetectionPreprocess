@@ -11,6 +11,7 @@ import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkConf
 import org.apache.spark.sql._
 import org.apache.spark.sql.catalyst.ScalaReflection
+import org.apache.spark.sql.functions.{col, explode, map_keys}
 import org.apache.spark.sql.streaming.StreamingQueryListener.{QueryProgressEvent, QueryStartedEvent, QueryTerminatedEvent}
 import org.apache.spark.sql.streaming.{GroupStateTimeout, OutputMode, StreamingQuery, StreamingQueryListener}
 import org.apache.spark.sql.types._
@@ -229,12 +230,49 @@ class S3ConnectorStreaming {
 
     val sequenceTable = df_events
       .writeStream
-      .format("delta")
-      .queryName("Write SequenceTable")
-      .partitionBy("trace")
-      .outputMode("append")
-      .option("checkpointLocation", f"${seq_table}_checkpoints/")
-      .start(seq_table)
+      .queryName("Write SequenceTable With Attributes")
+      .foreachBatch((batchDF: Dataset[EventStream], batchId: Long) => {
+
+        // Extract all keys in the 'attributes' Map
+        val keys = batchDF
+          .selectExpr("explode(map_keys(attributes)) as key")
+          .distinct()
+          .as[String]
+          .collect()
+          .toSeq
+
+        // Build columns: extract each key from attributes map
+        val attributeCols = keys.map { key =>
+          col("attributes").getItem(key).as(key)
+        }
+
+        // Common columns
+        val commonCols = Seq(
+          col("trace"),
+          col("event_type"),
+          col("position"),
+          col("timestamp")
+        )
+
+        val finalDF = batchDF.select(commonCols ++ attributeCols: _*)
+
+        finalDF.write
+          .format("delta")
+          .mode("append")
+          .partitionBy("trace") // Assuming you want to partition by trace ID
+          .option("mergeSchema", "true")
+          .save(seq_table)
+      })
+      .option("checkpointLocation", s"${seq_table}_checkpoints/")
+      .start()
+
+//    val sequenceTable = df_events.writeStream
+//      .format("delta")
+//      .queryName("Write SequenceTable")
+//      .partitionBy("trace")
+//      .outputMode("append")
+//      .option("checkpointLocation", f"${seq_table}_checkpoints/")
+//      .start(seq_table)
 
 
     val countEvents = df_events.toDF()
@@ -265,6 +303,7 @@ class S3ConnectorStreaming {
    */
   def write_single_table(df_events: Dataset[EventStream]): StreamingQuery = {
     val singleTable = df_events
+      .drop("attributes")
       .writeStream
       .queryName("Write SingleTable")
       .format("delta")
@@ -282,7 +321,6 @@ class S3ConnectorStreaming {
    * @return Reference to the query, in order to use awaitTermination at the end of all the processes
    */
   def write_index_table(pairs: Dataset[Structs.StreamingPair]): (StreamingQuery, StreamingQuery) = {
-    val spark = SparkSession.builder().getOrCreate()
     val indexTable = pairs
       .writeStream
       .queryName("Write IndexTable")
@@ -302,6 +340,53 @@ class S3ConnectorStreaming {
     (indexTable, logging)
   }
 
+  def write_index_table_attributes(pairs: Dataset[Structs.StreamingPairAttributes]) : (StreamingQuery, StreamingQuery) = {
+
+    val indexTable = pairs.writeStream
+      .queryName("Write IndexTable With Dynamic Attributes")
+      .foreachBatch ((batchDF: Dataset[Structs.StreamingPairAttributes], batchId: Long) => {
+
+        val keysA = batchDF
+          .selectExpr("explode(map_keys(attributesA)) as key")
+          .distinct()
+          .collect()
+          .map(row => row.getAs[String]("key"))
+          .toSet
+
+        val keysB = batchDF
+          .selectExpr("explode(map_keys(attributesB)) as key")
+          .distinct()
+          .collect()
+          .map(row => row.getAs[String]("key"))
+          .toSet
+
+        val attributeColsA = keysA.toSeq.map(k => col("attributesA").getItem(k).as(s"${k}_A"))
+        val attributeColsB = keysB.toSeq.map(k => col("attributesB").getItem(k).as(s"${k}_B"))
+        val commonCols = Seq("eventA", "eventB", "id", "positionA", "positionB", "timeA", "timeB")
+
+        val finalDF = batchDF.select(commonCols.map(col) ++ attributeColsA ++ attributeColsB: _*)
+
+        finalDF.write
+          .format("delta")
+          .mode("append")
+          .option("mergeSchema", "true")
+          .partitionBy("eventA")
+          .save(index_table)
+      })
+      .option("checkpointLocation", f"${index_table}_checkpoints/")
+      .start()
+
+    val logging = pairs.toDF().writeStream
+      .queryName("Update metadata from IndexTable")
+      .foreachBatch((batchDF: DataFrame, batchId: Long) => {
+        val countPairs = batchDF.count()
+        metadata.pairs = metadata.pairs + countPairs
+        updateMetadata()
+      })
+      .start()
+    (indexTable, logging)
+  }
+
   /**
    * Handles the writing of the metrics for each event pair in the CountTable. This is the most complecated
    * query in the streaming mode, because metrics should overwrite the previous records
@@ -309,7 +394,7 @@ class S3ConnectorStreaming {
    * @param pairs The calculated pairs for the last batch
    * @return Reference to the query, in order to use awaitTermination at the end of all the processes
    */
-  def write_count_table(pairs: Dataset[Structs.StreamingPair]): StreamingQuery = {
+  def write_count_table(pairs: Dataset[Structs.StreamingPairAttributes]): StreamingQuery = {
     val spark = SparkSession.builder().getOrCreate()
     import spark.implicits._
     //calculate metrics for each pair

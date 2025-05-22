@@ -1,8 +1,9 @@
 package auth.datalab.siesta.Pipeline
 
 import auth.datalab.siesta.BusinessLogic.Model.{EventStream, Structs}
-import auth.datalab.siesta.BusinessLogic.StreamingProcess.StreamingProcess
+import auth.datalab.siesta.BusinessLogic.StreamingProcess.{StreamingProcess, StreamingProcessAttributes}
 import auth.datalab.siesta.BusinessLogic.StreamingProcess.StreamingProcess.CustomState
+import auth.datalab.siesta.BusinessLogic.StreamingProcess.StreamingProcessAttributes.CustomStateAttributes
 import auth.datalab.siesta.CommandLineParser.Config
 import auth.datalab.siesta.S3ConnectorStreaming.S3ConnectorStreaming
 import auth.datalab.siesta.Utils.Utilities
@@ -67,22 +68,29 @@ object SiestaStreamingPipeline {
     //Compute pairs using Stateful function
     val grouped: KeyValueGroupedDataset[String, EventStream] = df_events.groupBy("trace").as[String, EventStream]
 
-    val pairs: Dataset[Structs.StreamingPair] = grouped
+//    val pairs: Dataset[Structs.StreamingPair] = grouped
+//      .flatMapGroupsWithState(OutputMode.Append,
+//      timeoutConf = GroupStateTimeout.EventTimeTimeout)((traceId: String, eventStream: Iterator[EventStream], groupState: GroupState[CustomState])=>{
+//        StreamingProcess.calculatePairs(traceId, eventStream, groupState,c.lookback_days)
+//      })
+
+    val pairsAttributes : Dataset[Structs.StreamingPairAttributes] = grouped
       .flatMapGroupsWithState(OutputMode.Append,
-      timeoutConf = GroupStateTimeout.EventTimeTimeout)((traceId: String, eventStream: Iterator[EventStream], groupState: GroupState[CustomState])=>{
-        StreamingProcess.calculatePairs(traceId, eventStream, groupState,c.lookback_days)
+        timeoutConf = GroupStateTimeout.EventTimeTimeout)((traceId: String, eventStream: Iterator[EventStream], groupState: GroupState[CustomStateAttributes])=>{
+        StreamingProcessAttributes.calculatePairs(traceId, eventStream, groupState,c.lookback_days)
       })
-    //writing in IndexTable
-    val indexTableQueries = s3Connector.write_index_table(pairs)
+
+    val indexTableQueriesAttributes = s3Connector.write_index_table_attributes(pairsAttributes)
 
     //write in CountTable
-    val countTableQuery = s3Connector.write_count_table(pairs)
+    val countTableQuery = s3Connector.write_count_table(pairsAttributes)
+
 
     sequenceTableQueries._1.awaitTermination()
     sequenceTableQueries._2.awaitTermination()
     singleTableQuery.awaitTermination()
-    indexTableQueries._1.awaitTermination()
-    indexTableQueries._2.awaitTermination()
+    indexTableQueriesAttributes._1.awaitTermination()
+    indexTableQueriesAttributes._2.awaitTermination()
     countTableQuery.awaitTermination()
 
   }
