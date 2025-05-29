@@ -1,0 +1,12 @@
+concept:name,time:timestamp,case:concept:name
+Activity A,2024-11-25 08:00:00.158000,Trace 1
+Activity B,2024-11-25 08:30:00.345000,Trace 1
+Activity B,2024-11-25 08:30:00.345000,Trace 1
+Activity C,2024-11-25 09:00:00.786000,Trace 1
+Activity C,2024-11-25 09:00:00.986000,Trace 1
+Activity C,2024-11-25 09:00:01.786000,Trace 1
+Activity B,2024-11-25 18:30:00.345000,Trace 1
+Activity C,2024-11-25 19:00:00.786000,Trace 1
+Activity X,2024-11-25 10:00:00.458000,Trace 2
+Activity Y,2024-11-25 10:30:00.123000,Trace 2
+Activity Z,2024-11-25 11:00:00.789000,Trace 2

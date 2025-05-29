@@ -340,52 +340,52 @@ class S3ConnectorStreaming {
     (indexTable, logging)
   }
 
-  def write_index_table_attributes(pairs: Dataset[Structs.StreamingPairAttributes]) : (StreamingQuery, StreamingQuery) = {
-
-    val indexTable = pairs.writeStream
-      .queryName("Write IndexTable With Dynamic Attributes")
-      .foreachBatch ((batchDF: Dataset[Structs.StreamingPairAttributes], batchId: Long) => {
-
-        val keysA = batchDF
-          .selectExpr("explode(map_keys(attributesA)) as key")
-          .distinct()
-          .collect()
-          .map(row => row.getAs[String]("key"))
-          .toSet
-
-        val keysB = batchDF
-          .selectExpr("explode(map_keys(attributesB)) as key")
-          .distinct()
-          .collect()
-          .map(row => row.getAs[String]("key"))
-          .toSet
-
-        val attributeColsA = keysA.toSeq.map(k => col("attributesA").getItem(k).as(s"${k}_A"))
-        val attributeColsB = keysB.toSeq.map(k => col("attributesB").getItem(k).as(s"${k}_B"))
-        val commonCols = Seq("eventA", "eventB", "id", "positionA", "positionB", "timeA", "timeB")
-
-        val finalDF = batchDF.select(commonCols.map(col) ++ attributeColsA ++ attributeColsB: _*)
-
-        finalDF.write
-          .format("delta")
-          .mode("append")
-          .option("mergeSchema", "true")
-          .partitionBy("eventA")
-          .save(index_table)
-      })
-      .option("checkpointLocation", f"${index_table}_checkpoints/")
-      .start()
-
-    val logging = pairs.toDF().writeStream
-      .queryName("Update metadata from IndexTable")
-      .foreachBatch((batchDF: DataFrame, batchId: Long) => {
-        val countPairs = batchDF.count()
-        metadata.pairs = metadata.pairs + countPairs
-        updateMetadata()
-      })
-      .start()
-    (indexTable, logging)
-  }
+//  def write_index_table_attributes(pairs: Dataset[Structs.StreamingPairAttributes]) : (StreamingQuery, StreamingQuery) = {
+//
+//    val indexTable = pairs.writeStream
+//      .queryName("Write IndexTable With Dynamic Attributes")
+//      .foreachBatch ((batchDF: Dataset[Structs.StreamingPairAttributes], batchId: Long) => {
+//
+//        val keysA = batchDF
+//          .selectExpr("explode(map_keys(attributesA)) as key")
+//          .distinct()
+//          .collect()
+//          .map(row => row.getAs[String]("key"))
+//          .toSet
+//
+//        val keysB = batchDF
+//          .selectExpr("explode(map_keys(attributesB)) as key")
+//          .distinct()
+//          .collect()
+//          .map(row => row.getAs[String]("key"))
+//          .toSet
+//
+//        val attributeColsA = keysA.toSeq.map(k => col("attributesA").getItem(k).as(s"${k}_A"))
+//        val attributeColsB = keysB.toSeq.map(k => col("attributesB").getItem(k).as(s"${k}_B"))
+//        val commonCols = Seq("eventA", "eventB", "id", "positionA", "positionB", "timeA", "timeB")
+//
+//        val finalDF = batchDF.select(commonCols.map(col) ++ attributeColsA ++ attributeColsB: _*)
+//
+//        finalDF.write
+//          .format("delta")
+//          .mode("append")
+//          .option("mergeSchema", "true")
+//          .partitionBy("eventA")
+//          .save(index_table)
+//      })
+//      .option("checkpointLocation", f"${index_table}_checkpoints/")
+//      .start()
+//
+//    val logging = pairs.toDF().writeStream
+//      .queryName("Update metadata from IndexTable")
+//      .foreachBatch((batchDF: DataFrame, batchId: Long) => {
+//        val countPairs = batchDF.count()
+//        metadata.pairs = metadata.pairs + countPairs
+//        updateMetadata()
+//      })
+//      .start()
+//    (indexTable, logging)
+//  }
 
   /**
    * Handles the writing of the metrics for each event pair in the CountTable. This is the most complecated
@@ -394,7 +394,7 @@ class S3ConnectorStreaming {
    * @param pairs The calculated pairs for the last batch
    * @return Reference to the query, in order to use awaitTermination at the end of all the processes
    */
-  def write_count_table(pairs: Dataset[Structs.StreamingPairAttributes]): StreamingQuery = {
+  def write_count_table(pairs: Dataset[Structs.StreamingPair]): StreamingQuery = {
     val spark = SparkSession.builder().getOrCreate()
     import spark.implicits._
     //calculate metrics for each pair

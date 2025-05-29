@@ -116,7 +116,7 @@ object SiestaPipeline {
       //extract new pairs
       val pairs = ExtractPairs.extract(inverted, lastChecked, metadata.lookback)
 
-      val pairsAttributes = ExtractPairsAttributes.extract(invertedAttributes, lastChecked, metadata.lookback)
+//      val pairsAttributes = ExtractPairsAttributes.extract(invertedAttributes, lastChecked, metadata.lookback)
 
       //merging last checked records
       val diffInMills = TimeUnit.DAYS.toMillis(metadata.lookback)
@@ -150,7 +150,7 @@ object SiestaPipeline {
       dbConnector.write_last_checked_table(filtered_rdd, metadata)
 //      pairs._2.unpersist()
       //write new event pairs
-      dbConnector.write_index_table_attributes(pairsAttributes._1, metadata)
+      dbConnector.write_index_table(pairs._1, metadata)
 //      pairs._1.unpersist()
       //calculate and write countTable
       val counts = ExtractCounts.extract(pairs._1)

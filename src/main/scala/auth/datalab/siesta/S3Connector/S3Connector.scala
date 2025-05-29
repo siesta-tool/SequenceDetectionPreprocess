@@ -383,50 +383,50 @@ class S3Connector extends DBConnector{
     Logger.getLogger("Index Table Write").log(Level.INFO, s"finished in ${total / 1000} seconds")
   }
 
-  def write_index_table_attributes(newPairs: RDD[Structs.PairFullAttributes], metaData: MetaData): Unit = {
-    Logger.getLogger("Index Table Write").log(Level.INFO, s"Start writing Index table")
-    val spark = SparkSession.builder().getOrCreate()
-    import spark.sqlContext.implicits._
-    val start = System.currentTimeMillis()
-    metaData.pairs += newPairs.count() //update metadata
-    val df = if (metaData.mode == "positions") {
-      newPairs.map(x => {
-          (x.eventA, x.eventB, x.id, x.positionA, x.positionB, x.attributesA, x.attributesB)
-        })
-        .toDF("eventA", "eventB", "trace_id", "positionA", "positionB", "attributesA", "attributesB")
-    } else {
-      newPairs.map(x => {
-          (x.eventA, x.eventB, x.id, x.timeA, x.timeB, x.attributesA, x.attributesB)
-        })
-        .toDF("eventA", "eventB", "trace_id", "timestampA", "timestampB", "attributesA", "attributesB")
-    }
-
-    val attributeColsA = allKeys.map { key =>
-      col("attributesA").getItem(key).as(s"${key}_A")
-    }
-
-    val attributeColsB = allKeys.map { key =>
-      col("attributesB").getItem(key).as(s"${key}_B")
-    }
-
-    val commonCols = if (metaData.mode == "positions") {
-      Seq("eventA", "eventB", "trace_id", "positionA", "positionB")
-    } else {
-      Seq("eventA", "eventB", "trace_id", "timestampA", "timestampB")
-    }
-
-    // 4. Select and build the final DataFrame
-    val final_df = df.select(
-      commonCols.map(col) ++ attributeColsA ++ attributeColsB: _*
-    )
-
-    //partition by the interval (start and end) and the first event of the event type pair
-    final_df.repartition(col("eventA"))
-      .write.partitionBy("eventA")
-      .mode(SaveMode.Append).parquet(this.index_table)
-    val total = System.currentTimeMillis() - start
-    Logger.getLogger("Index Table Write").log(Level.INFO, s"finished in ${total / 1000} seconds")
-  }
+//  def write_index_table_attributes(newPairs: RDD[Structs.PairFullAttributes], metaData: MetaData): Unit = {
+//    Logger.getLogger("Index Table Write").log(Level.INFO, s"Start writing Index table")
+//    val spark = SparkSession.builder().getOrCreate()
+//    import spark.sqlContext.implicits._
+//    val start = System.currentTimeMillis()
+//    metaData.pairs += newPairs.count() //update metadata
+//    val df = if (metaData.mode == "positions") {
+//      newPairs.map(x => {
+//          (x.eventA, x.eventB, x.id, x.positionA, x.positionB, x.attributesA, x.attributesB)
+//        })
+//        .toDF("eventA", "eventB", "trace_id", "positionA", "positionB", "attributesA", "attributesB")
+//    } else {
+//      newPairs.map(x => {
+//          (x.eventA, x.eventB, x.id, x.timeA, x.timeB, x.attributesA, x.attributesB)
+//        })
+//        .toDF("eventA", "eventB", "trace_id", "timestampA", "timestampB", "attributesA", "attributesB")
+//    }
+//
+//    val attributeColsA = allKeys.map { key =>
+//      col("attributesA").getItem(key).as(s"${key}_A")
+//    }
+//
+//    val attributeColsB = allKeys.map { key =>
+//      col("attributesB").getItem(key).as(s"${key}_B")
+//    }
+//
+//    val commonCols = if (metaData.mode == "positions") {
+//      Seq("eventA", "eventB", "trace_id", "positionA", "positionB")
+//    } else {
+//      Seq("eventA", "eventB", "trace_id", "timestampA", "timestampB")
+//    }
+//
+//    // 4. Select and build the final DataFrame
+//    val final_df = df.select(
+//      commonCols.map(col) ++ attributeColsA ++ attributeColsB: _*
+//    )
+//
+//    //partition by the interval (start and end) and the first event of the event type pair
+//    final_df.repartition(col("eventA"))
+//      .write.partitionBy("eventA")
+//      .mode(SaveMode.Append).parquet(this.index_table)
+//    val total = System.currentTimeMillis() - start
+//    Logger.getLogger("Index Table Write").log(Level.INFO, s"finished in ${total / 1000} seconds")
+//  }
 
   /**
    * Writes count to countTable

@@ -68,29 +68,29 @@ object SiestaStreamingPipeline {
     //Compute pairs using Stateful function
     val grouped: KeyValueGroupedDataset[String, EventStream] = df_events.groupBy("trace").as[String, EventStream]
 
-//    val pairs: Dataset[Structs.StreamingPair] = grouped
-//      .flatMapGroupsWithState(OutputMode.Append,
-//      timeoutConf = GroupStateTimeout.EventTimeTimeout)((traceId: String, eventStream: Iterator[EventStream], groupState: GroupState[CustomState])=>{
-//        StreamingProcess.calculatePairs(traceId, eventStream, groupState,c.lookback_days)
-//      })
-
-    val pairsAttributes : Dataset[Structs.StreamingPairAttributes] = grouped
+    val pairs: Dataset[Structs.StreamingPair] = grouped
       .flatMapGroupsWithState(OutputMode.Append,
-        timeoutConf = GroupStateTimeout.EventTimeTimeout)((traceId: String, eventStream: Iterator[EventStream], groupState: GroupState[CustomStateAttributes])=>{
-        StreamingProcessAttributes.calculatePairs(traceId, eventStream, groupState,c.lookback_days)
+      timeoutConf = GroupStateTimeout.EventTimeTimeout)((traceId: String, eventStream: Iterator[EventStream], groupState: GroupState[CustomState])=>{
+        StreamingProcess.calculatePairs(traceId, eventStream, groupState,c.lookback_days)
       })
 
-    val indexTableQueriesAttributes = s3Connector.write_index_table_attributes(pairsAttributes)
+//    val pairsAttributes : Dataset[Structs.StreamingPairAttributes] = grouped
+//      .flatMapGroupsWithState(OutputMode.Append,
+//        timeoutConf = GroupStateTimeout.EventTimeTimeout)((traceId: String, eventStream: Iterator[EventStream], groupState: GroupState[CustomStateAttributes])=>{
+//        StreamingProcessAttributes.calculatePairs(traceId, eventStream, groupState,c.lookback_days)
+//      })
+
+    val indexTableQueries = s3Connector.write_index_table(pairs)
 
     //write in CountTable
-    val countTableQuery = s3Connector.write_count_table(pairsAttributes)
+    val countTableQuery = s3Connector.write_count_table(pairs)
 
 
     sequenceTableQueries._1.awaitTermination()
     sequenceTableQueries._2.awaitTermination()
     singleTableQuery.awaitTermination()
-    indexTableQueriesAttributes._1.awaitTermination()
-    indexTableQueriesAttributes._2.awaitTermination()
+    indexTableQueries._1.awaitTermination()
+    indexTableQueries._2.awaitTermination()
     countTableQuery.awaitTermination()
 
   }

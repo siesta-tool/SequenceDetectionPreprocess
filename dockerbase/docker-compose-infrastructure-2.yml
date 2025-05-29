@@ -1,3 +1,4 @@
+version: '3.7'
 services:
   minio:
     container_name: minio
@@ -32,7 +33,8 @@ services:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: INSIDE:PLAINTEXT,OUTSIDE:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: INSIDE://:9093,OUTSIDE://localhost:9092
+#      KAFKA_ADVERTISED_LISTENERS: INSIDE://:9093,OUTSIDE://siesta-kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: INSIDE://:9093,OUTSIDE:${kafkaBroker}
       KAFKA_LISTENERS: INSIDE://:9093,OUTSIDE://:9092
       KAFKA_INTER_BROKER_LISTENER_NAME: INSIDE
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
@@ -89,39 +91,11 @@ services:
     networks:
       - siesta-net
 
-  preprocess:
-    build:
-      context: .
-      dockerfile: dockerbase/REST.Dockerfile
-    ports:
-      - "8000:8000"
-      - "4040:4040"
-    networks:
-      - siesta-net
-    volumes:
-      - preprocesses:/app/pythonAPI/dbSQL
-      - ./experiments/input:/app/pythonAPI/uploadedfiles
-    environment:
-      s3accessKeyAws: minioadmin
-      s3ConnectionTimeout: 600000
-      s3endPointLoc: http://minio:9000
-      s3secretKeyAws: minioadmin
-
-x-disabled:
-  send_events: #send example events in form .withTimestamp
-    build:
-      context: .
-      dockerfile: send_events.Dockerfile
-    networks:
-      - siesta-net
-
-
 networks:
   siesta-net:
     name: siesta-net
 #    external: true
 
 volumes:
-  minio_storage: {}
-  preprocesses: {}
-  postgres-data: {}
+  postgres-data: { }
+  minio_storage: { }
