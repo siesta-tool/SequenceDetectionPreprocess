@@ -205,7 +205,11 @@ object ReadLogFile {
     val groupedRDD = df.rdd.map(row =>
       (row.getString(0), new Event(timestamp = row.getString(2), event_type = row.getString(1), trace_id = row.getString(0),
         position = 0))
-    ).groupByKey()
+    ).combineByKey(
+      (event: Event) => List(event), // Create a list with the first event
+      (acc: List[Event], event: Event) => event :: acc, // Add event to the list
+      (acc1: List[Event], acc2: List[Event]) => acc1 ++ acc2 // Merge lists from different partitions
+    )
 
     // Sort by timestamp and assign positions
     import spark.implicits._
