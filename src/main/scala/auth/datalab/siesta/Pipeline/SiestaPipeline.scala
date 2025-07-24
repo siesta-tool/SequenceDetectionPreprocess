@@ -15,7 +15,7 @@ import org.apache.spark.storage.StorageLevel
 
 import java.sql.Timestamp
 import java.util.concurrent.TimeUnit
-import auth.datalab.siesta.DeclareIncrementa.DeclareIncrementalPipeline
+import auth.datalab.siesta.DeclareIncremental.DeclareIncrementalPipeline
 
 
 object SiestaPipeline {

@@ -1,4 +1,4 @@
-package auth.datalab.siesta.DeclareIncrementa
+package auth.datalab.siesta.DeclareIncremental
 
 import auth.datalab.siesta.S3Connector.S3Connector
 import auth.datalab.siesta.Utils.Utilities

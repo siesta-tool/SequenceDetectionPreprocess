@@ -1,4 +1,4 @@
-package auth.datalab.siesta.DeclareIncrementa
+package auth.datalab.siesta.DeclareIncremental
 
 import org.apache.spark.broadcast.Broadcast
 import org.apache.spark.rdd.RDD
@@ -6,7 +6,7 @@ import org.apache.spark.sql.{Dataset, SaveMode, SparkSession}
 import org.apache.spark.storage.StorageLevel
 import auth.datalab.siesta.BusinessLogic.Model.Structs._
 import auth.datalab.siesta.BusinessLogic.Model.Event
-import auth.datalab.siesta.DeclareIncrementa.DeclareIncrementalPipeline.EventDeclare
+import auth.datalab.siesta.DeclareIncremental.DeclareIncrementalPipeline.EventDeclare
 
 import scala.collection.mutable.ListBuffer
 
