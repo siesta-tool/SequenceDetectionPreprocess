@@ -18,7 +18,7 @@ object ExtractCounts {
    * @param pairs The RDD that contains all the newly generated event type pairs
    * @return The statistics for each event type pair in the RDD
    */
-  def extract(pairs:RDD[Structs.PairFull]):RDD[Structs.Count]={
+  def extract(pairs:RDD[Structs.PairFullAttributes]):RDD[Structs.Count]={
     pairs.map(x=>{
       val duration = (x.timeB.getTime-x.timeA.getTime)/1000 //store it in seconds
       ((x.eventA,x.eventB),duration,1,duration,duration,Math.pow(duration, 2))

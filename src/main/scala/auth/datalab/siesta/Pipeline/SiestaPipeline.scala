@@ -114,7 +114,7 @@ object SiestaPipeline {
       val lastChecked: RDD[LastChecked] = dbConnector.read_last_checked_table(metadata)
 
       //extract new pairs
-      val pairs = ExtractPairs.extract(inverted, lastChecked, metadata.lookback)
+//      val pairs = ExtractPairs.extract(inverted, lastChecked, metadata.lookback)
 
       val pairsAttributes = ExtractPairsAttributes.extract(invertedAttributes, lastChecked, metadata.lookback)
 
@@ -125,7 +125,7 @@ object SiestaPipeline {
 
       val merged_rdd = if (lastChecked != null) {
         lastChecked.keyBy(x => (x.eventA, x.eventB, x.id))
-          .fullOuterJoin(pairs._2.keyBy(x => (x.eventA, x.eventB, x.id)))
+          .fullOuterJoin(pairsAttributes._2.keyBy(x => (x.eventA, x.eventB, x.id)))
           .map(x => {
             if (x._2._2.isEmpty) {
               x._2._1.get
@@ -134,7 +134,7 @@ object SiestaPipeline {
             }
           })
       } else {
-        pairs._2
+        pairsAttributes._2
       }
 
       //removing last checked records that are more than 'lookback'- time ago
@@ -153,7 +153,7 @@ object SiestaPipeline {
       dbConnector.write_index_table_attributes(pairsAttributes._1, metadata)
 //      pairs._1.unpersist()
       //calculate and write countTable
-      val counts = ExtractCounts.extract(pairs._1)
+      val counts = ExtractCounts.extract(pairsAttributes._1)
 //      counts.persist(StorageLevel.MEMORY_AND_DISK)
       dbConnector.write_count_table(counts, metadata)
 //      counts.unpersist()

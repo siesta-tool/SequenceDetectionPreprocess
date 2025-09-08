@@ -53,6 +53,8 @@ class S3Connector extends DBConnector{
     spark.conf.set("spark.sql.sources.partitionOverwriteMode", "dynamic")
     spark.conf.set("spark.sql.parquet.compression.codec", config.compression)
     spark.conf.set("spark.sql.parquet.filterPushdown", "true")
+//    spark.conf.set("spark.sql.parquet.mergeSchema", "true")
+//    spark.conf.set("spark.sql.parquet.schema.merge.enabled", "true") // Optional, version dependent
 
     spark.sparkContext.setLogLevel("WARN")
   }
@@ -238,27 +240,27 @@ class S3Connector extends DBConnector{
     import spark.sqlContext.implicits._
     val start = System.currentTimeMillis()
     val df = sequenceRDD.map { x =>
-//        val attributes = x match {
-//          case event: EventWithAttributes => event.attributes
-//          case _ => Map.empty[String, String] // Default empty attributes for non-EventWithAttributes
-//        }
-        (x.event_type, x.trace_id, x.position, x.timestamp)
-      }.toDF("event_type", "trace_id", "position", "timestamp")
+        val attributes = x match {
+          case event: EventWithAttributes => event.attributes
+          case _ => Map.empty[String, String] // Default empty attributes for non-EventWithAttributes
+        }
+        (x.event_type, x.trace_id, x.position, x.timestamp, attributes)
+      }.toDF("event_type", "trace_id", "position", "timestamp", "attributes")
 
-//    val attributeColumns = allKeys.map { key =>
-//      col("attributes").getItem(key).as(key)
-//    }
-//
-//    val final_df = df.select(
-//      Seq(
-//        col("trace_id"),
-//        col("event_type"),
-//        col("position"),
-//        col("timestamp")
-//      ) ++ attributeColumns: _*
-//    )
+    val attributeColumns = allKeys.map { key =>
+      col("attributes").getItem(key).as(key)
+    }
 
-    df
+    val final_df = df.select(
+      Seq(
+        col("trace_id"),
+        col("event_type"),
+        col("position"),
+        col("timestamp")
+      ) ++ attributeColumns: _*
+    )
+
+    final_df
       .repartition(col("event_type")) //partition based on the event type
       .write
       .partitionBy("event_type")
