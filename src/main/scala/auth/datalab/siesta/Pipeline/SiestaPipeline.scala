@@ -6,8 +6,10 @@ import auth.datalab.siesta.BusinessLogic.IngestData.IngestingProcess
 import auth.datalab.siesta.BusinessLogic.Model.Structs.{InvertedSingleFull, LastChecked}
 import auth.datalab.siesta.BusinessLogic.Model.{Event, EventTrait}
 import auth.datalab.siesta.BusinessLogic.Metadata.MetaData
+import auth.datalab.siesta.BusinessLogic.DBConnector.DBConnector
 import auth.datalab.siesta.CommandLineParser.Config
 import auth.datalab.siesta.S3Connector.S3Connector
+import auth.datalab.siesta.CassandraConnector.{CassandraConnector, NaiveCassandraConnector}
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.rdd.RDD
 import org.apache.spark.sql.SparkSession
@@ -20,11 +22,21 @@ import auth.datalab.siesta.DeclareIncremental.DeclareIncrementalPipeline
 
 object SiestaPipeline {
 
+  /**
+   * Factory method to create the appropriate database connector based on configuration
+   */
+  private def createDBConnector(config: Config): DBConnector = {
+    config.database.toLowerCase match {
+      case "s3" => new S3Connector()
+      case "cassandra" => new CassandraConnector()
+      case _ => throw new IllegalArgumentException(s"Unsupported database: ${config.database}")
+    }
+  }
+
   def execute(c: Config): Unit = {
 
-
-    //If new database is added the dbConnector can be set here.
-    val dbConnector = new S3Connector()
+    //Create the appropriate database connector based on configuration
+    val dbConnector = createDBConnector(c)
 
 
     dbConnector.initialize_spark(c)

@@ -1,10 +1,12 @@
 val sparkVersion = "3.5.4"
 val hadoopVersion= "3.3.4"
 
-ThisBuild / name := "Siesta"
+ThisBuild / name := "sequencedetectionpreprocess"
 ThisBuild / version := "3.0.0"
 ThisBuild / scalaVersion := "2.12.17"
 ThisBuild / organization := "auth.datalab"
+
+name := "sequencedetectionpreprocess"
 
 ThisBuild / Test / parallelExecution := false
 
@@ -25,7 +27,8 @@ libraryDependencies += "com.github.scopt" %% "scopt" % "4.1.0" //parser for the 
 libraryDependencies ++= Seq(
 
   "org.apache.spark" %% "spark-core" % sparkVersion, //% "provided"
-  "org.apache.spark" %% "spark-sql" % sparkVersion )
+  "org.apache.spark" %% "spark-sql" % sparkVersion,
+  "org.apache.spark" %% "spark-catalyst" % sparkVersion)
 libraryDependencies += "org.apache.hadoop" % "hadoop-common" % hadoopVersion
 libraryDependencies += "org.apache.hadoop" % "hadoop-client" % hadoopVersion
 libraryDependencies += "org.apache.hadoop" % "hadoop-aws" % hadoopVersion //3.0.3
@@ -38,7 +41,12 @@ libraryDependencies += "org.apache.spark" %% "spark-sql-kafka-0-10" % sparkVersi
 libraryDependencies += "io.delta" %% "delta-spark" % "3.2.0"
 libraryDependencies += "org.postgresql" % "postgresql" % "42.7.3"
 
+// Cassandra dependencies
+libraryDependencies += "com.datastax.spark" %% "spark-cassandra-connector" % "3.5.0"
+libraryDependencies += "com.datastax.oss" % "java-driver-core" % "4.17.0"
+
 assembly / assemblyMergeStrategy:= {
+  case PathList("META-INF", "services", _*) => MergeStrategy.concat
   case PathList("META-INF", xs @ _*) => MergeStrategy.discard
   case manifest if manifest.contains("MANIFEST.MF") =>
     MergeStrategy.discard

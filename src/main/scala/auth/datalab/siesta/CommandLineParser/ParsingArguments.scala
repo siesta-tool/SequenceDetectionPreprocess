@@ -40,7 +40,7 @@ object ParsingArguments {
         .action((x, c) => c.copy(database = x))
         .valueName("<database>")
         .validate(x => {
-          if (x.equals("s3")) { //can be used to add another scalable db
+          if (x.equals("s3") || x.equals("cassandra")) { //can be used to add another scalable db
             success
           } else {
             failure("Supported values for <database> are s3 or cassandra")

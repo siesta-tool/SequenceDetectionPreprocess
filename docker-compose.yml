@@ -89,23 +89,93 @@ services:
     networks:
       - siesta-net
 
+  scylla:
+    image: scylladb/scylla:5.2
+    container_name: scylla
+    command: --smp 1 --memory 750M --overprovisioned 1 --api-address 0.0.0.0
+    ports:
+      - "9042:9042"   # CQL native transport
+      - "9180:9180"   # REST API (optional)
+
+#  cassandra:
+#    container_name: cassandra
+#    image: cassandra:4.1
+#    ports:
+#      - "9042:9042"
+#    environment:
+#      - CASSANDRA_CLUSTER_NAME=SiestaCluster
+#      - CASSANDRA_DC=datacenter1
+#      - CASSANDRA_RACK=rack1
+#      - CASSANDRA_ENDPOINT_SNITCH=GossipingPropertyFileSnitch
+#      - CASSANDRA_NUM_TOKENS=128
+#    volumes:
+#      - cassandra_data:/var/lib/cassandra
+#    networks:
+#      - siesta-net
+#    healthcheck:
+#      test: ["CMD-SHELL", "[ $$(nodetool statusgossip) = running ]"]
+#      interval: 30s
+#      timeout: 10s
+#      retries: 5
+
+
+  # preprocess:
+  #   build:
+  #     context: .
+  #     dockerfile: dockerbase/REST.Dockerfile
+  #   ports:
+  #     - "8000:8000"
+  #     - "4040:4040"
+  #   networks:
+  #     - siesta-net
+  #   volumes:
+  #     - preprocesses:/app/pythonAPI/dbSQL
+  #     - ./experiments/input:/app/pythonAPI/uploadedfiles
+  #   environment:
+  #     s3accessKeyAws: minioadmin
+  #     s3ConnectionTimeout: 600000
+  #     s3endPointLoc: http://minio:9000
+  #     s3secretKeyAws: minioadmin
+
+
   preprocess:
     build:
       context: .
-      dockerfile: dockerbase/REST.Dockerfile
-    ports:
-      - "8000:8000"
-      - "4040:4040"
+      dockerfile: Dockerfile
+    container_name: preprocess
+    environment:
+      - s3accessKeyAws=minioadmin
+      - s3ConnectionTimeout=60
+      - s3endPointLoc=http://minio:9000
+      - s3secretKeyAws=minioadmin
+      - CASSANDRA_HOST=http://cassandra
+      - CASSANDRA_PORT=9042
+      - CASSANDRA_USER=cassandra
+      - CASSANDRA_PASSWORD=cassandra
+      - JAVA_TOOL_OPTIONS=-XX:-UseContainerSupport --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED --add-opens=java.base/java.lang.ref=ALL-UNNAMED --add-opens=java.base/java.time=ALL-UNNAMED --add-opens=java.base/java.time.zone=ALL-UNNAMED --add-opens=java.management/sun.management=ALL-UNNAMED
+    volumes:
+      - ./experiments/input:/app/input
+      - ./experiments/output:/app/output
+    entrypoint:
+      - /opt/spark/bin/spark-submit
+      - --master
+      - local[2]
+      - --driver-memory
+      - 4g
+      - --executor-memory
+      - 2g
+      - --conf
+      - spark.sql.adaptive.enabled=true
+      - --conf
+      - spark.sql.adaptive.coalescePartitions.enabled=true
+      - --conf
+      - spark.eventLog.enabled=true
+      - --conf
+      - spark.eventLog.dir=/tmp/spark-events
+      - preprocess.jar
+    command: ["--logname", "bpic2017", "--file", "/app/input/bpic2017.xes"]
     networks:
       - siesta-net
-    volumes:
-      - preprocesses:/app/pythonAPI/dbSQL
-      - ./experiments/input:/app/pythonAPI/uploadedfiles
-    environment:
-      s3accessKeyAws: minioadmin
-      s3ConnectionTimeout: 600000
-      s3endPointLoc: http://minio:9000
-      s3secretKeyAws: minioadmin
 
 x-disabled:
   send_events: #send example events in form .withTimestamp
@@ -119,9 +189,10 @@ x-disabled:
 networks:
   siesta-net:
     name: siesta-net
-#    external: true
+    # external: true
 
 volumes:
   minio_storage: {}
   preprocesses: {}
   postgres-data: {}
+  cassandra_data: {}
