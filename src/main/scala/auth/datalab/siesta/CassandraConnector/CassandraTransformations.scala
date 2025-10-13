@@ -224,7 +224,7 @@ object CassandraTransformations {
             }).mkString(",") //comma to separate the different occurrences corresponding to the same id
             s"${c._1}||$o" // double || to separate id from the occurrences
           }).toList
-        CassandraIndex(b._1._3, b._1._4, b._1._1, b._1._1, occs)
+        CassandraIndex(b._1._3, b._1._4, b._1._1, b._1._2, occs)
       })
   }
 
@@ -246,7 +246,7 @@ object CassandraTransformations {
   def transformCountToWrite(counts: RDD[Structs.Count]): RDD[CassandraCount] = {
     counts.groupBy(_.eventA)
       .map(x => {
-        val times = x._2.map(t => s"${t.eventB},${t.sum_duration},${t.count},${t.min_duration},${t.max_duration}")
+        val times = x._2.map(t => s"${t.eventB},${t.sum_duration},${t.count},${t.min_duration},${t.max_duration},${t.sum_squares}")
         CassandraCount(x._1, times.toList)
       })
   }
