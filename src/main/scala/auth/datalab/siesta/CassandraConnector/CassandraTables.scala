@@ -24,7 +24,7 @@ object CassandraTables {
     tableMap+=((logname+"_single","event_type text, trace_id text, occurrences list<text>, PRIMARY KEY (event_type,trace_id)"))
     tableMap+=((logname+"_lastchecked","event_a text, event_b text, trace_id text, timestamp text, PRIMARY KEY ((event_a,event_b),trace_id)"))
     tableMap+=((logname+"_count","event_a text, times list<text>, PRIMARY KEY (event_a)"))
-    tableMap+=((logname+"_index","event_a text, event_b text, start timestamp, end timestamp, occurrences list<text>, PRIMARY KEY ((event_a,event_b), start,end)"))
+    tableMap+=((logname+"_index","event_a text, event_b text, occurrences list<text>, PRIMARY KEY ((event_a,event_b))"))
     tableMap.toMap
   }
 

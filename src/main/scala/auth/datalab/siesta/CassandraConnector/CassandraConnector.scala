@@ -471,7 +471,7 @@ class CassandraConnector extends DBConnector {
     //utilize the append property to make it more efficient than merging them
     df
       .saveToCassandra(keyspaceName = this.cassandra_keyspace_name, tableName = this.tables("index"),
-        columns = SomeColumns("event_a", "event_b", "start", "end", "occurrences" append), writeConf = writeConf)
+        columns = SomeColumns("event_a", "event_b", "occurrences" append), writeConf = writeConf)
     df.unpersist()
     val total = System.currentTimeMillis() - start
     Logger.getLogger("Index Table Write").log(Level.INFO, s"finished in ${total / 1000} seconds")

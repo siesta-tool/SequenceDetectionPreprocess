@@ -161,12 +161,10 @@ object CassandraTransformations {
    *
    * @param event_a The first event type
    * @param event_b The second event time
-   * @param start The start of the interval
-   * @param end The end of the interval
    * @param occurrences The list of all the occurrences of this event type pair, grouped for each different
    *                    trace
    */
-  case class CassandraIndex(event_a: String, event_b: String, start: Timestamp, end: Timestamp, occurrences: List[String])
+  case class CassandraIndex(event_a: String, event_b: String, occurrences: List[String])
 
   /**
    * The stored format is (event_typeA, event_typeB)(interval_start, interval_end)-> List of occurrences, where each
@@ -211,7 +209,7 @@ object CassandraTransformations {
   def transformIndexToWrite(pairs: RDD[Structs.PairFull], metaData: MetaData): RDD[CassandraIndex] = {
     val spark = SparkSession.builder().getOrCreate()
     val bc: Broadcast[String] = spark.sparkContext.broadcast(metaData.mode)
-    pairs.groupBy(a => (a.timeA,a.timeB,a.eventA, a.eventB))
+    pairs.groupBy(a => (a.eventA, a.eventB))
       .map(b => {
         val occs: List[String] = b._2.groupBy(_.id)
           .map(c => {
@@ -224,7 +222,7 @@ object CassandraTransformations {
             }).mkString(",") //comma to separate the different occurrences corresponding to the same id
             s"${c._1}||$o" // double || to separate id from the occurrences
           }).toList
-        CassandraIndex(b._1._3, b._1._4, b._1._1, b._1._2, occs)
+        CassandraIndex(b._1._1, b._1._2, occs)
       })
   }
 
