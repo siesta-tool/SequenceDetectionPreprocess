@@ -136,7 +136,7 @@ for system in "${SYSTEMS[@]}"; do
 
         for database in "${DATABASES[@]}"; do
             # Conditional database usage: siesta uses s3 and cassandra, others use only cassandra
-            if [ "$system" != "siesta" ] && [ "$database" = "s3" ]; then
+            if [ "$system" != "siesta" ] && [ "$database" = "s3" ] && [ "$mode" = "timestamps" ]; then
                 echo "  Skipping $database for $system"
                 continue
             fi
