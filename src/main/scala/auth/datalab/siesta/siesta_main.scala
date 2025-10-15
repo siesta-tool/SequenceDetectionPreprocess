@@ -28,6 +28,10 @@ object siesta_main {
 
     if (config.system == "streaming") {
       SiestaStreamingPipeline.execute(config)
+    } else if (config.system == "signatures") {
+      Singatures.Signatures.execute(config)
+    } else if (config.system == "set-containment") {
+      SetContainment.SetContainment.execute(config)
     } else {
       SiestaPipeline.execute(config)
     }

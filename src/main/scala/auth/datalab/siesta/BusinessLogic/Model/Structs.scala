@@ -43,4 +43,8 @@ object Structs {
   case class PairConstraint(rule:String, eventA:String, eventB:String, occurrences:Double)
 
   case class UnorderedHelper(eventA:String,eventB:String, ua:Long, ub:Long, pairs:Long,key:String)
+
+  case class Event(timestamp: String, event: String) extends Serializable
+  case class Sequence(events: List[Event], sequence_id: Long) extends Serializable
+
 }

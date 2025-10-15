@@ -29,7 +29,7 @@ object ParsingArguments {
         .action((x, c) => c.copy(system = x))
         .valueName("<system>")
         .validate(x => {
-          if (x.equals("siesta") || x.equals("streaming")) { //can be used to add other systems or competitors
+          if (x.equals("siesta") || x.equals("streaming") || x.equals("set-containment") || x.equals("signatures")) { //can be used to add other systems or competitors
             success
           } else {
             failure("Supported values for <system> are siesta, signatures, set-containment or streaming")
