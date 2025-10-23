@@ -7,7 +7,7 @@ import auth.datalab.siesta.Utils.Utilities
 import com.datastax.oss.driver.api.core.ConsistencyLevel
 import com.datastax.spark.connector._
 import com.datastax.spark.connector.cql.CassandraConnector
-import com.datastax.spark.connector.writer.WriteConf
+import com.datastax.spark.connector.writer.{BatchGroupingKey, WriteConf}
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
@@ -37,7 +37,12 @@ class CassandraConnector extends DBConnector {
   private var cassandra_gc_grace_seconds: String = _
   private var tables: Map[String, String] = Map[String, String]()
   private var _configuration: SparkConf = _
-  private val writeConf: WriteConf = WriteConf(consistencyLevel = ConsistencyLevel.LOCAL_ONE) // throughputMiBPS = Option(0.8)
+  private val writeConf: WriteConf = WriteConf(
+    consistencyLevel = ConsistencyLevel.LOCAL_ONE,
+    batchSize = 1,
+    batchGroupingBufferSize = 10,
+    batchGroupingKey = BatchGroupingKey.None
+  )
 
   /**
    * Spark initilizes the connection to Cassandra utilizing cassandra properties, that are available through the

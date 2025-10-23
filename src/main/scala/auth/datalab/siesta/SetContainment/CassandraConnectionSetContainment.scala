@@ -6,7 +6,7 @@ import auth.datalab.siesta.Utils.Utilities
 import com.datastax.oss.driver.api.core.ConsistencyLevel
 import com.datastax.spark.connector._
 import com.datastax.spark.connector.cql.CassandraConnector
-import com.datastax.spark.connector.writer.WriteConf
+import com.datastax.spark.connector.writer.{BatchGroupingKey, WriteConf}
 import org.apache.log4j.{Level, Logger}
 import org.apache.spark.SparkConf
 import org.apache.spark.rdd.RDD
@@ -43,7 +43,12 @@ class CassandraConnectionSetContainment extends Serializable {
   private val cassandra_write_consistency_level: String = "ONE"
   private val cassandra_gc_grace_seconds: String = "864000"
   private var _configuration: SparkConf = _
-  private val writeConf: WriteConf = WriteConf(consistencyLevel = ConsistencyLevel.ONE) //batchSize = 1, throughputMiBPS = Option(0.5)
+  private val writeConf: WriteConf = WriteConf(
+    consistencyLevel = ConsistencyLevel.ONE,
+    batchSize = 1,
+    batchGroupingBufferSize = 10,
+    batchGroupingKey = BatchGroupingKey.None
+  )
 
   /**
    * Initializes communication between spark and Cassandra using environmental variables
