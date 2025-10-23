@@ -386,7 +386,19 @@ class CassandraConnector extends DBConnector {
     if (df.isEmpty) {
       return null
     }
-    CassandraTransformations.transformLastCheckedToRDD(df)
+    import scala.collection.JavaConverters._
+    df.rdd.flatMap(r => {
+      val eventA = r.getAs[String]("event_a")
+      val eventB = r.getAs[String]("event_b")
+      r.getAs[Seq[String]]("records").map(y => {
+        val parts = y.split("\\|")
+        Structs.LastChecked(eventA, eventB, parts(0), parts(1))
+      })
+    })
+
+
+
+    // CassandraTransformations.transformLastCheckedToRDD(df)
   }
 
 //  /**
@@ -409,12 +421,19 @@ class CassandraConnector extends DBConnector {
   override def write_last_checked_table(lastChecked: RDD[Structs.LastChecked], metaData: MetaData):Unit= {
     Logger.getLogger("LastChecked Table Write").log(Level.INFO, s"Start writing LastChecked table")
     val start = System.currentTimeMillis()
-    val transformed = CassandraTransformations.transformLastCheckedToWrite(lastChecked)
-    transformed.persist(StorageLevel.MEMORY_AND_DISK)
+
+    // Group by (eventA, eventB) and collect records as List[String]; each record is built as "id|id" to preserve original behavior
+    val transformed = lastChecked
+      .keyBy(x => (x.eventA, x.eventB))            // RDD[((String,String), Structs.LastChecked)]
+      .groupByKey()                                // RDD[((String,String), Iterable[Structs.LastChecked])]
+      .mapValues(iter => iter.map(y => y.id + "|" + y.timestamp).toList) // RDD[((String,String), List[String])]
+      .map { case ((a, b), records) => (a, b, records) }          // RDD[(String, String, List[String])]
+
+    // Explicitly specify columns to match table schema
     transformed
       .saveToCassandra(keyspaceName = this.cassandra_keyspace_name, tableName = this.tables("lastChecked"),
-        writeConf = writeConf)
-    transformed.unpersist()
+        columns = SomeColumns("event_a", "event_b", "records"), writeConf = writeConf)
+
     val total = System.currentTimeMillis() - start
     Logger.getLogger("LastChecked Table Write").log(Level.INFO, s"finished in ${total / 1000} seconds")
   }
