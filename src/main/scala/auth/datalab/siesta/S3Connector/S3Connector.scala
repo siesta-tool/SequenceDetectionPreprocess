@@ -34,7 +34,7 @@ class S3Connector extends DBConnector{
   def initialize_spark(config: Config): Unit = {
     lazy val spark = SparkSession.builder()
       .appName("SIESTA indexing")
-      .master("local[*]")
+      .master(Utilities.readEnvVariable("master"))
       .getOrCreate()
 
     val s3accessKeyAws = Utilities.readEnvVariable("s3accessKeyAws")
@@ -354,3 +354,4 @@ class S3Connector extends DBConnector{
 
 
 }
+
