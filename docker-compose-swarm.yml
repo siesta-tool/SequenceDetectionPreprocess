@@ -98,6 +98,9 @@ services:
           - 'node.labels.host == m2'
 
   spark:
+    build:
+      context: .
+      dockerfile: spark-base.Dockerfile
     image: spark-base:3.5.4
     networks:
       - siesta-swarm-net
