@@ -92,10 +92,10 @@ services:
   scylla:
     image: scylladb/scylla:5.2
     container_name: scylla
-    command: --smp 1 --memory 750M --overprovisioned 1 --api-address 0.0.0.0
+    command: --smp 1 --memory 16G --overprovisioned 1 --api-address 0.0.0.0
     ports:
-      - "9042:9042"   # CQL native transport
-      - "9180:9180"   # REST API (optional)
+      - "9042:9042"
+      - "9180:9180"  
 
   preprocess:
     build:
@@ -110,10 +110,15 @@ services:
       - preprocesses:/app/pythonAPI/dbSQL
       - ./experiments/input:/app/pythonAPI/uploadedfiles
     environment:
+      master: localhost
       s3accessKeyAws: minioadmin
       s3ConnectionTimeout: 600000
       s3endPointLoc: http://minio:9000
       s3secretKeyAws: minioadmin
+      CASSANDRA_HOST: scylla
+      CASSANDRA_PORT: 9042
+      CASSANDRA_USER: cassandra
+      CASSANDRA_PASSWORD: cassandra
 
   preprocess-single:
     build:
@@ -121,11 +126,12 @@ services:
       dockerfile: Dockerfile
     container_name: preprocess-single
     environment:
+      - master=localhost
       - s3accessKeyAws=minioadmin
       - s3ConnectionTimeout=600000
       - s3endPointLoc=http://minio:9000
       - s3secretKeyAws=minioadmin
-      - CASSANDRA_HOST=cassandra
+      - CASSANDRA_HOST=scylla
       - CASSANDRA_PORT=9042
       - CASSANDRA_USER=cassandra
       - CASSANDRA_PASSWORD=cassandra
@@ -133,9 +139,6 @@ services:
     volumes:
       - ./experiments/input:/app/input
       - ./experiments/output:/app/output
-    # depends_on:
-    #   - cassandra
-    #   - minio
     entrypoint:
       - /opt/spark/bin/spark-submit
       - --master
@@ -163,11 +166,12 @@ services:
       dockerfile: Dockerfile
     container_name: preprocess-evaluation
     environment:
+      - master=localhost
       - s3accessKeyAws=minioadmin
       - s3ConnectionTimeout=600000
-      - s3endPointLoc=http://anaconda.csd.auth.gr:9000
+      - s3endPointLoc=http://minio:9000
       - s3secretKeyAws=minioadmin
-      - CASSANDRA_HOST=anaconda.csd.auth.gr
+      - CASSANDRA_HOST=scylla
       - CASSANDRA_PORT=9042
       - CASSANDRA_USER=cassandra
       - CASSANDRA_PASSWORD=cassandra
@@ -176,9 +180,6 @@ services:
       - ./experiments/input:/app/input
       - ./experiments/output:/app/output
       - ./experiments/evaluation_results:/app/evaluation_results
-      # depends_on:
-      #- minio
-      # - cassandra
     entrypoint: [ "/bin/bash" ]
     command: [ "/app/run_evaluation.sh" ]
     networks:
@@ -197,7 +198,7 @@ x-disabled:
 networks:
   siesta-net:
     name: siesta-net
-    external: true
+    # external: true
 
 volumes:
   minio_storage: {}
