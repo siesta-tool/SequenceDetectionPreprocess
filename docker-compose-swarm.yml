@@ -1,0 +1,164 @@
+version: '3'
+
+networks:
+  siesta-swarm-net:
+
+volumes:
+  maven-cache:
+
+services:
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+    command: server /data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - minio_storage:/data
+    networks:
+      - siesta-swarm-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+      placement:
+        constraints:
+          - 'node.labels.host == m1'
+
+  scylla:
+    container_name: scylla
+    image: scylladb/scylla:latest
+    ports:
+      - "9042:9042"
+    command: --smp 8 --memory 32G --reserve-memory 2G --overprovisioned 1 --api-address 0.0.0.0
+    volumes:
+      - scylla_data:/var/lib/scylla
+    networks:
+      - siesta-net
+    healthcheck:
+      test: ["CMD-SHELL", "nodetool status"]
+      interval: 15s
+      timeout: 15s
+      retries: 5
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+      placement:
+        constraints:
+          - 'node.labels.host == m1'
+
+  preprocess-evaluation:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: preprocess-evaluation
+    container_name: preprocess-evaluation
+    environment:
+      - master=spark://spark:7077
+      - s3bucketName=siesta
+      - s3accessKeyAws=minioadmin
+      - s3secretKeyAws=minioadmin
+      - s3ConnectionTimeout=600000
+      - s3endPointLoc=http://minio:9000
+      - CASSANDRA_HOST=scylla
+      - CASSANDRA_PORT=9042
+      - CASSANDRA_USER=cassandra
+      - CASSANDRA_PASSWORD=cassandra
+      - JAVA_TOOL_OPTIONS=-XX:-UseContainerSupport --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.lang.invoke=ALL-UNNAMED --add-opens=java.base/java.lang.reflect=ALL-UNNAMED --add-opens=java.base/java.io=ALL-UNNAMED --add-opens=java.base/java.net=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.util.concurrent=ALL-UNNAMED --add-opens=java.base/java.util.concurrent.atomic=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED --add-opens=java.base/sun.nio.cs=ALL-UNNAMED --add-opens=java.base/sun.security.action=ALL-UNNAMED --add-opens=java.base/sun.util.calendar=ALL-UNNAMED --add-opens=java.security.jgss/sun.security.krb5=ALL-UNNAMED --add-opens=java.base/java.lang.ref=ALL-UNNAMED --add-opens=java.base/java.time=ALL-UNNAMED --add-opens=java.base/java.time.zone=ALL-UNNAMED --add-opens=java.management/sun.management=ALL-UNNAMED
+    volumes:
+      # Using type: bind to explicitly specify we want host path mounting
+      - type: bind
+        source: /home/balaktsis/siesta-is/SequenceDetectionPreprocess/experiments/input
+        target: /app/input
+      - type: bind
+        source: /home/balaktsis/siesta-is/SequenceDetectionPreprocess/experiments/output
+        target: /app/output
+      - type: bind
+        source: /home/balaktsis/siesta-is/SequenceDetectionPreprocess/experiments/evaluation_results
+        target: /app/evaluation_results
+    entrypoint: ["/bin/bash"]
+    command: ["/app/run_evaluation.sh"]
+    networks:
+      - siesta-swarm-net
+    deploy:
+      replicas: 1
+      restart_policy:
+        condition: on-failure
+        max_attempts: 3
+      placement:
+        constraints:
+          # CRITICAL: This service MUST run on a machine where the above paths exist because volumes are local paths
+          - 'node.labels.host == m2'
+
+  spark:
+    image: spark-base:3.5.4
+    networks:
+      - siesta-swarm-net
+    environment:
+      - SPARK_MODE=master
+      - SPARK_MASTER_MEMORY=16G
+      - SPARK_MASTER_CORES=4
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_USER=spark
+      - LOGS_PATH=/tmp/spark-events
+      - RESULTS_PATH=/tmp/output/
+      - SPARK_MASTER_WEBUI_PORT=8085
+    ports:
+      - '8085:8085'
+      - '4040:4040'
+      - '8081:8081'
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - 'node.labels.host == m2'
+
+  spark-worker-1:
+    image: spark-base:3.5.4
+    networks:
+      - siesta-swarm-net
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_MEMORY=8G
+      - SPARK_WORKER_CORES=4
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_USER=spark
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - 'node.labels.host == m2'
+
+  spark-worker-2:
+    image: spark-base:3.5.4
+    networks:
+      - siesta-swarm-net
+    environment:
+      - SPARK_MODE=worker
+      - SPARK_MASTER_URL=spark://spark:7077
+      - SPARK_WORKER_MEMORY=8G
+      - SPARK_WORKER_CORES=4
+      - SPARK_RPC_AUTHENTICATION_ENABLED=no
+      - SPARK_RPC_ENCRYPTION_ENABLED=no
+      - SPARK_LOCAL_STORAGE_ENCRYPTION_ENABLED=no
+      - SPARK_SSL_ENABLED=no
+      - SPARK_USER=spark
+    deploy:
+      replicas: 1
+      placement:
+        constraints:
+          - 'node.labels.host == m3'
