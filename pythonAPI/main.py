@@ -22,7 +22,7 @@ model.Base.metadata.create_all(bind=engine)
 
 spark_location = "/opt/spark/bin/spark-submit"
 
-ALLOWED_EXTENSIONS = {'withTimestamp', 'xes'}
+ALLOWED_EXTENSIONS = {'withTimestamp', 'xes', 'csv'}
 
 s3accessKeyAws = "minioadmin" if os.environ.get("s3accessKeyAws") is None else os.environ["s3accessKeyAws"]
 s3secretKeyAws = "minioadmin" if os.environ.get("s3secretKeyAws") is None else os.environ["s3secretKeyAws"]

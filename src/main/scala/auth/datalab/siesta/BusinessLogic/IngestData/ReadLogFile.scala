@@ -7,6 +7,7 @@ import org.deckfour.xes.in.XParserRegistry
 import org.deckfour.xes.model.{XLog, XTrace}
 
 import java.io.{File, FileInputStream}
+import java.sql.Timestamp
 import java.text.SimpleDateFormat
 import java.util.Scanner
 import scala.collection.convert.ImplicitConversions.`list asScalaBuffer`
@@ -44,6 +45,8 @@ object ReadLogFile {
       this.readFromXes(fileName)
     } else if (fileName.split('.')(1) == "withTimestamp") {
       this.readWithTimestamps(fileName, ",", "/delab/")
+    } else if (fileName.split('.')(1) == "csv") {
+      this.readFromCSV(fileName)
     } else {
       throw new Exception("Not recognised file type")
     }
@@ -181,7 +184,9 @@ object ReadLogFile {
 
   /**
    * WithTimestamps is a custom file format that was used to evaluate the performance of SIESTA as it can be easily
-   * transformed to csv files that can be ingested in ELK stack
+   * transformed to csv files that can be ingested in ELK stack.
+   * Format: trace_id::event_type/delab/timestamp/delab/key1=value1/delab/key2=value2,...
+   * Additional key=value pairs after timestamp are parsed as attributes.
    *
    * @param fileName  The name of the log file
    * @param seperator The separator of the events for a specific trace
@@ -198,13 +203,107 @@ object ReadLogFile {
       val index = line.split("::")(0)
       val events = line.split("::")(1)
       val sequence = events.split(seperator).zipWithIndex.map(event => {
-        new Event(timestamp = event._1.split(delimiter)(1), event_type = event._1.split(delimiter)(0), trace_id = index,
-          position = event._2)
+        val parts = event._1.split(delimiter)
+        val event_type = parts(0)
+        val timestamp = parts(1)
+        
+        // Parse additional attributes (key=value pairs) starting from index 2
+        val attributes: Map[String, String] = if (parts.length > 2) {
+          parts.drop(2).flatMap { attr =>
+            val kv = attr.split("=", 2)
+            if (kv.length == 2) Some(kv(0) -> kv(1)) else None
+          }.toMap
+        } else {
+          Map("no_attributes_present" -> "null")
+        }
+        
+        new EventWithAttributes(timestamp = timestamp, event_type = event_type, trace_id = index,
+          position = event._2, attributes = attributes)
       })
       ar.append(new Sequence(sequence.toList, index))
     }
     val par = spark.sparkContext.parallelize(ar)
     par
+  }
+
+  /**
+   * CSV files are standard tabular format. The first three columns must be trace_id, event_type, timestamp.
+   * Any additional columns are treated as attributes (column name = key, cell value = value).
+   *
+   * @param fileName The name of the log file
+   * @return The RDD that contains the parsed traces
+   */
+  private def readFromCSV(fileName: String): RDD[Sequence] = {
+    val spark = SparkSession.builder().getOrCreate()
+    
+    // Read CSV file into DataFrame with header
+    val df = spark.read.option("header", "true").csv(fileName)
+    
+    // Get all column names
+    val columns = df.columns
+    val requiredColumns = Seq("trace_id", "event_type", "timestamp")
+    
+    // Validate required columns exist
+    requiredColumns.foreach { col =>
+      if (!columns.contains(col)) {
+        throw new Exception(s"CSV file must contain '$col' column")
+      }
+    }
+    
+    // Get attribute column names (all columns except required ones)
+    val attributeColumns = columns.filter(col => !requiredColumns.contains(col))
+    
+    // Convert DataFrame to RDD and group by trace_id
+    val groupedRDD = df.rdd.map { row =>
+      val traceId = row.getAs[String]("trace_id")
+      val eventType = row.getAs[String]("event_type")
+      val timestamp = row.getAs[String]("timestamp")
+      
+      // Extract attributes from additional columns
+      val attributes: Map[String, String] = if (attributeColumns.nonEmpty) {
+        attributeColumns.flatMap { colName =>
+          val value = row.getAs[String](colName)
+          if (value != null && value.nonEmpty) Some(colName -> value) else None
+        }.toMap
+      } else {
+        Map("no_attributes_present" -> "null")
+      }
+      
+      val finalAttributes = if (attributes.isEmpty) Map("no_attributes_present" -> "null") else attributes
+      
+      (traceId, new EventWithAttributes(
+        timestamp = timestamp,
+        event_type = eventType,
+        trace_id = traceId,
+        position = 0,
+        attributes = finalAttributes
+      ))
+    }.combineByKey(
+      (event: EventWithAttributes) => List(event),
+      (acc: List[EventWithAttributes], event: EventWithAttributes) => event :: acc,
+      (acc1: List[EventWithAttributes], acc2: List[EventWithAttributes]) => acc1 ++ acc2
+    )
+    
+    // Sort by timestamp and assign positions
+    val sequencesRDD = groupedRDD.map { case (traceId, events) =>
+      val sortedEvents = events
+        .map(x => (x, Timestamp.valueOf(x.timestamp).getTime))
+        .toList
+        .sortBy(_._2)
+        .zipWithIndex
+        .map { case ((event, _), index) =>
+          new EventWithAttributes(
+            timestamp = event.timestamp,
+            event_type = event.event_type,
+            trace_id = event.trace_id,
+            position = index,
+            attributes = event.attributes
+          )
+        }
+      new Sequence(sortedEvents, traceId)
+    }
+    
+    sequencesRDD
   }
 
 }
